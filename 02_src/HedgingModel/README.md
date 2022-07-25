@@ -1,2 +1,2 @@
-# SabrSummerProject2022
- This is a heding strategies project using sabr model shared by Weitao Chen, Dongyu Wei, and Jiahao Yu.
+# SabrSummerProject2022--Hedging module
+ This is hedging module, done by Weitao Chen.
