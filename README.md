@@ -16,7 +16,7 @@ Examples:
 >>> sabrmodel = SabrHagan2002(sigma=0.2, vov=0.6, rho=0.3, beta=0.6)
 
 # 3 options for the calibration; 
-# `is_vol` is whether the input variable is price of implied vol; 
+# `is_vol` is whether the input variable is price or implied vol; 
 # `setval` is whether we set the calibrated params as the model params.
 >>> sabrmodel.calibrate3(price_or_vol3=opt_price, strike3=strike, spot=spot, texp=texp, is_vol=False, setval=True)
 {'sigma': 0.31446090777041097,
