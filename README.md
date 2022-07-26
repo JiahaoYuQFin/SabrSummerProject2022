@@ -5,6 +5,16 @@ This is a heding strategies project using sabr model shared by Weitao Chen, Dong
 ```python
 Examples:
 >>> from OptionModel.sabr import SabrHagan2002
+
+# market info
+>>> opt_price = np.array([0.1575, 0.0989, 0.0574])
+>>> strike = np.array([2.8, 2.9, 3.0])
+>>> spot=2.8870
+>>> texp=68/365.25
+
+# init model
+>>> sabrmodel = SabrHagan2002(sigma=0.2, vov=0.6, rho=0.3, beta=0.6)
+
 # 3 options for the calibration; 
 # `is_vol` is whether the input variable is price of implied vol; 
 # `setval` is whether we set the calibrated params as the model params.
