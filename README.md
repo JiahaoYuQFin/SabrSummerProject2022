@@ -29,4 +29,4 @@ array([0.68602924, 0.52392876, 0.34993297])
 ```
 ## HedgingModel
 
-Plz refer to .$\backslasb$HedgingModel$\backslasb$README.md and .$\backslasb$HedgingModel$\backslasb$analysis_demo.py
+Plz refer to .\HedgingModel\README.md and .\HedgingModel\analysis_demo.py
