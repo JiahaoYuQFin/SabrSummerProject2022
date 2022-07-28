@@ -14,7 +14,7 @@ class OptABC(abc.ABC):
     is_fwd = False
 
     IMPVOL_TOL = 1e-10
-    IMPVOL_MAXVOL = 99.99
+    IMPVOL_MAXVOL = 999.99
 
     def __init__(self, sigma, intr=0.0, divr=0.0, is_fwd=False):
         """
@@ -157,7 +157,7 @@ class OptABC(abc.ABC):
         Returns:
             delta value
         """
-        h = spot * 0.001
+        h = spot * 1e-6
         delta = (
             self.price(strike, spot + h, texp, cp) -
             self.price(strike, spot - h, texp, cp)
@@ -177,7 +177,7 @@ class OptABC(abc.ABC):
         Returns:
             Delta with numerical derivative
         """
-        h = spot * 0.001
+        h = spot * 1e-6
         gamma = (
             self.price(strike, spot + h, texp, cp)
             - 2 * self.price(strike, spot, texp, cp)
@@ -198,7 +198,7 @@ class OptABC(abc.ABC):
         Returns:
             vega value
         """
-        h = 0.001
+        h = 1e-6
         model = copy.copy(self)
         model.sigma += h
         p_up = model.price(strike, spot, texp, cp)
