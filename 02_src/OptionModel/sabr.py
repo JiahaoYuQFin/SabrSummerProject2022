@@ -193,7 +193,7 @@ class SabrHagan2002(SabrABC):
             vol3 = price_or_vol3
         else:
             vol3 = self._m_base(None).impvol(price_or_vol3, strike3, spot, texp, cp=cp)
-
+        
         def iv_func(x):
             model.sigma = np.exp(x[0])
             model.vov = np.exp(x[1])
