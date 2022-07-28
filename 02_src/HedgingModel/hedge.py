@@ -187,7 +187,8 @@ def Option_Position_Hold(df, quota = 0.5, limit = 1e6):
     df = pd.merge(df, exist_position[['code', 'current_position']], how = 'left', on = 'code')
     df['position_available'] = np.abs(df['profit_position'] * df['volume'] * quota)
     position = df.loc[df['profit_position'] != 0, 'position_available'].min()
-    df['profit_position'] = df['profit_position'] * position
+    df['profit_position'] = (df['profit_position'] * position).fillna(0)
+    df['profit_position'] = df['profit_position'].astype(int)
     df.loc[(df['profit_position']*df['current_position'])>0, 'profit_position'] = df.loc[(df['profit_position']*df['current_position'])>0, 'current_position']
     df = df.drop(columns=['position_available', 'current_position'])
     
@@ -216,7 +217,7 @@ def Hedge_Spot(df, delta_tolerance = 0):
     
     delta = (df['profit_position'] * df['delta']).sum()
     if np.abs(delta - exist_position['hedge_position'].sum()) > delta_tolerance:
-        df.loc[df['type']=='S', 'hedge_position'] = -delta
+        df.loc[df['type']=='S', 'hedge_position'] = -round(delta)
     else:
         df.loc[df['type']=='S', 'hedge_position'] = exist_position['hedge_position'].sum()
     
@@ -239,7 +240,7 @@ def Hedge_ATM(df, atm = 0.2, delta_tolerance = 0):
     df = df.drop(columns = 'current_position')
     df.loc[df['hedge_position']*df['profit_position'] != 0, 'hedge_position'] = 0
     df.loc[np.abs(df['delta'] - 0.5) > atm, 'hedge_position'] = 0
-    delta = ((df['hedge_position'] + df['profit_position']) * df['delta']).sum()
+    delta = (df['profit_position'] * df['delta']).sum()
     hedge_delta = (df['hedge_position'] * df['delta']).sum()
     if np.sign(hedge_delta) != np.sign(delta):
         df['hedge_position'] = 0
@@ -249,7 +250,7 @@ def Hedge_ATM(df, atm = 0.2, delta_tolerance = 0):
     else:
         instruments = df.loc[delta/df['delta']<0, :]
         hedge_option = np.abs(instruments['strike price'] - spot).argmin()
-        df.loc[hedge_option, 'hedge_position'] = -delta/df.loc[hedge_option, 'delta']
+        df.loc[hedge_option, 'hedge_position'] = -round(delta/df.loc[hedge_option, 'delta'])
     
     exist_position = df.copy()
     
