@@ -180,14 +180,22 @@ def Global_Exist(df):
 '''
 # df must contain the calculation of greeks, profit_position, volume of each contract
 # fluctuate with market volume
-def Option_Position_Hold(df, quota = 0.5, limit = 1e6):
+def Option_Position_Hold(df, quota = 0.5, contract_limit = 0.2, notional_limit = 1e8):
     global exist_position
     
+    if (df['profit_position']!=0).sum() == 0:
+        exist_position = df.copy()
+        return df
+    
+    spot = df.loc[df['type'] == 'S', 'close'].values[0]
     exist_position = exist_position.rename(columns = {'profit_position':'current_position'})
     df = pd.merge(df, exist_position[['code', 'current_position']], how = 'left', on = 'code')
     df['position_available'] = np.abs(df['profit_position'] * df['volume'] * quota)
-    position = df.loc[df['profit_position'] != 0, 'position_available'].min()
-    df['profit_position'] = (df['profit_position'] * position).fillna(0)
+    position = df.loc[df['profit_position'] != 0, 'position_available'].min() 
+    notional_position = notional_limit/spot/10000 - np.abs(df.loc[(df['profit_position']*df['current_position'])>0, 'current_position']).sum()
+    limit_position = min(notional_position, notional_limit * contract_limit/spot/10000)
+    position = min(position, limit_position)
+    df['profit_position'] = df['profit_position'] * position
     df['profit_position'] = df['profit_position'].astype(int)
     df.loc[(df['profit_position']*df['current_position'])>0, 'profit_position'] = df.loc[(df['profit_position']*df['current_position'])>0, 'current_position']
     df = df.drop(columns=['position_available', 'current_position'])
@@ -226,7 +234,7 @@ def Hedge_Spot(df, delta_tolerance = 0):
     return df
 
 
-def Hedge_ATM(df, atm = 0.2, delta_tolerance = 0):
+def Hedge_ATM_theta(df, atm = 0.2, delta_tolerance = 0):
     '''
     use ATM option to hedge, atm parameter is used to define close to ATM options
     delta_tolerance: if exceed delta tolerance, then hedge delta to zero
@@ -249,6 +257,37 @@ def Hedge_ATM(df, atm = 0.2, delta_tolerance = 0):
         pass
     else:
         instruments = df.loc[delta/df['delta']<0, :]
+        hedge_option = np.abs(instruments['strike price'] - spot).argmin()
+        df.loc[hedge_option, 'hedge_position'] = -round(delta/df.loc[hedge_option, 'delta'])
+    
+    exist_position = df.copy()
+    
+    return df
+
+def Hedge_ATM_vega(df, atm = 0.2, delta_tolerance = 0):
+    '''
+    use ATM option to hedge, atm parameter is used to define close to ATM options
+    delta_tolerance: if exceed delta tolerance, then hedge delta to zero
+    '''
+    global exist_position
+    
+    spot = df.loc[df['type'] == 'S', 'close'].values[0]
+    exist_position = exist_position.rename(columns = {'hedge_position':'current_position'})
+    df = pd.merge(df, exist_position[['code', 'current_position']], how = 'left', on = 'code')
+    df['hedge_position'] = df['current_position']
+    df = df.drop(columns = 'current_position')
+    df.loc[df['hedge_position']*df['profit_position'] != 0, 'hedge_position'] = 0
+    df.loc[np.abs(df['delta'] - 0.5) > atm, 'hedge_position'] = 0
+    delta = (df['profit_position'] * df['delta']).sum()
+    hedge_delta = (df['hedge_position'] * df['delta']).sum()
+    if np.sign(hedge_delta) != np.sign(delta):
+        df['hedge_position'] = 0
+    delta = ((df['hedge_position'] + df['profit_position']) * df['delta']).sum()
+    vega = ((df['hedge_position'] + df['profit_position']) * df['vega']).sum()
+    if np.abs(delta) <= delta_tolerance:
+        pass
+    else:
+        instruments = df.loc[vega/df['vega']<0, :]
         hedge_option = np.abs(instruments['strike price'] - spot).argmin()
         df.loc[hedge_option, 'hedge_position'] = -round(delta/df.loc[hedge_option, 'delta'])
     
