@@ -39,7 +39,7 @@ from OptionModel.option_abc import OptABC
 
 def pandas_apply_sabr(df):
     
-    def fit_split_cp(df, cp, spot, texp):
+    def fit_split_cp(df, cp, spot, texp, vol_min):
         atm = df.loc[np.abs(df['strike price'] - spot).nsmallest(2).index, :]
         index_fit = [atm['volume'].idxmax()]
         index_fit.append(df.loc[df['strike price'] < atm['strike price'].min(), 'volume'].idxmax())
@@ -51,11 +51,18 @@ def pandas_apply_sabr(df):
         sabrmodel = SabrHagan2002(sigma=0.2, vov=0.6, rho=0.3, beta=0.6)
         sabrmodel.calibrate3(price_or_vol3=opt_price, strike3=strike, spot=spot, texp=texp, is_vol=False, setval=True, cp = cp)
         
+        # check volume
+        df = df.loc[df['volume']>=vol_min, :]
+        strike = df['strike price'].values
+        # check delta
+        df['delta'] = sabrmodel.delta_numeric(strike, spot, texp, cp=cp)
+        df = df.loc[np.abs(df['delta'])<1, :]
+        df = df.loc[np.sign(df['delta'])==np.sign(cp), :]
+        
         opt_price = df['close'].values
         strike = df['strike price'].values
         df['black Vol'] = sabrmodel.impvol_brentq(opt_price, strike, spot, texp, cp=cp)
         df['sabr Vol'] = sabrmodel.vol_for_price(strike, spot, texp)
-        df['delta'] = sabrmodel.delta_numeric(strike, spot, texp, cp=cp)
         df['gamma'] = sabrmodel.gamma_numeric(strike, spot, texp, cp=cp)
         df['vega'] = sabrmodel.vega_numeric(strike, spot, texp, cp=cp)
         df['theta'] = sabrmodel.theta_numeric(strike, spot, texp, cp=cp)
@@ -67,15 +74,15 @@ def pandas_apply_sabr(df):
     call = df.loc[df['type'] == 'C', :]
     put = df.loc[df['type'] == 'P', :]
     
-    sabr_c = fit_split_cp(call, 1, spot, texp)
-    sabr_p = fit_split_cp(put, -1, spot, texp)
+    sabr_c = fit_split_cp(call, 1, spot, texp, 10)
+    sabr_p = fit_split_cp(put, -1, spot, texp, 10)
     
-    return pd.concat([sabr_c, sabr_p]).reset_index(drop = True)
+    return pd.concat([sabr_c, sabr_p])
 
 # 2022-06-07 13:15:00 brentq报错 valueerror
-insample = option2207.loc[option2207['time_to_mature'] > 37, :]
-insample = insample.groupby('time').progress_apply(pandas_apply_sabr)
+insample = option2207.groupby('time').progress_apply(pandas_apply_sabr)
 
+insample = insample.reset_index(drop = True)
 insample = insample.reset_index(drop = True)
 insample = insample.loc[(np.abs(insample['delta']) < 0.9)&(np.abs(insample['delta']) > 0.1), :]
 insample['signal'] = (insample['black Vol'] - insample['sabr Vol'])/insample['sabr Vol']
@@ -87,16 +94,22 @@ etf_insample = etf.set_index('time').reindex(insample.set_index('time').index.dr
 # just a demo
 # hedgemodel = path + '/HedgingModel/hedge.py'
 # os.system('python '+hedgemodel)
+sys.path.append('/Users/chenwynn/Documents/Intern_project/HTSC_Summer/sabr_vol')
+import hedge
 
-from HedgingModel import hedge
-
-pcpl = insample.groupby('time').apply(hedge.Put_Call_Parity_l).reset_index(drop = True)
+dict_ = {'by_rank':10}
+pcpl = insample.groupby('time').progress_apply(hedge.Put_Call_Parity_s, **dict_).reset_index(drop = True)
 
 pcpl1 = hedge.Hedge_Transform(pcpl, etf_insample)
 hedge.Global_Exist(pcpl1)
-pcpl1 = pcpl1.groupby('time').apply(hedge.Option_Position_Hold).reset_index(drop = True)
+pcpl1 = pcpl1.groupby('time').progress_apply(hedge.Option_Position_Hold).reset_index(drop = True)
+# 可以另外调整对冲频率
+pcpl1['hedge_freq'] = pcpl1['time'].apply(lambda x: x.date())
+close_time = pcpl1.groupby('hedge_freq').last().set_index('time').index
+pcpl1_hedge = pcpl1.set_index('time').loc[close_time,:].reset_index()
 hedge.Global_Exist(pcpl1)
-pcpl1 = pcpl1.groupby('time').apply(hedge.Hedge_ATM).reset_index(drop = True)
+pcpl1_hedge = pcpl1_hedge.groupby('time').progress_apply(hedge.Hedge_Spot).reset_index(drop = True)
+pcpl1 = pd.merge(pcpl1.drop(columns = 'hedge_position'), pcpl1_hedge[['time', 'hedge_position']], how = 'left', on = 'time')
 
 
 
