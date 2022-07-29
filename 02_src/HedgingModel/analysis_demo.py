@@ -8,7 +8,8 @@ Created on Wed Jul 27 09:07:31 2022
 import pandas as pd
 import numpy as np
 import sys
-path = '/Users/chenwynn/Documents/Intern_project/HTSC_Summer/team/SabrSummerProject2022/02_src'
+#path = '/Users/chenwynn/Documents/Intern_project/HTSC_Summer/team/SabrSummerProject2022/02_src'
+path = '/Users/lenovo/git_intro/SabrSummerProject2022/02_src'
 sys.path.append(path)
 import os
 import datetime
@@ -18,7 +19,8 @@ warnings.filterwarnings("ignore")
 from tqdm import tqdm
 tqdm.pandas(desc='pandas bar')
 
-data_path = '/Users/chenwynn/Documents/Intern_project/HTSC_Summer/team/SabrSummerProject2022/03_data'
+#data_path = '/Users/chenwynn/Documents/Intern_project/HTSC_Summer/team/SabrSummerProject2022/03_data'
+data_path = '/Users/lenovo/git_intro/SabrSummerProject2022/03_data'
 option2207 = pd.read_csv(os.path.join(data_path, '300etf_option2207.csv'), index_col=0)
 etf = pd.read_csv(os.path.join(data_path, '300etf.csv'), index_col=0)
 
@@ -98,7 +100,7 @@ pcpl1 = pcpl1.groupby('time').apply(hedge.Option_Position_Hold).reset_index(drop
 hedge.Global_Exist(pcpl1)
 pcpl1 = pcpl1.groupby('time').apply(hedge.Hedge_ATM).reset_index(drop = True)
 
-
+pcpl1.to_csv("/Users/lenovo/git_intro/SabrSummerProject2022/backtest/strategy_file/strategy_test.csv")
 
 
 
