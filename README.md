@@ -27,6 +27,9 @@ array([0.01729237, 0.03168252, 0.07599214, 0.12615207, 0.192496  ])
 >>> sabrmodel.delta_numeric(strike=strike, spot=spot, texp=texp, cp=1)
 array([0.68602924, 0.52392876, 0.34993297])
 ```
+
+Note that OptionModel.sabr is suited for the case that calls and puts are fitted separately and three points are used for the fitting. LS fitting methods and one curve implementation is in OptionModel.sabr_bywynn.
+
 ## HedgingModel
 
 Plz refer to .\HedgingModel\README.md and .\HedgingModel\analysis_demo.py
