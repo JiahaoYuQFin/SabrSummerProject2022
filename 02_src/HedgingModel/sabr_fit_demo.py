@@ -102,7 +102,7 @@ def pandas_apply_sabr(temp):
     atm_spread = y[np.abs(y - spot_price).argmin()] - spot_price
     atm_index_cp = np.where(y == spot_price + atm_spread)[0]
     if len(atm_index_cp) < 2:
-        atm_index = atm_index_cp[0][0]
+        atm_index = atm_index_cp[0]
     else:
         atm_index_c = atm_index_cp[np.where(isCall[atm_index_cp] == True)[0][0]]
         atm_index_p = atm_index_cp[np.where(isCall[atm_index_cp] == False)[0][0]]
