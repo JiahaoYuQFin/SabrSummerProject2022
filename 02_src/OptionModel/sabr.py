@@ -201,7 +201,17 @@ class SabrHagan2002(SabrABC):
             err = model.vol_for_price(strike3, spot, texp=texp) - vol3
             return err
 
-        sol = sopt.root(iv_func, np.array([np.log(vol3[1]), -1, 0.0]))
+        sol = sopt.root(iv_func, np.array([np.log(vol3[1]), 0.0, 0.0]))
+        if not sol.success:
+            sol = sopt.root(iv_func, np.array([np.log(vol3[1]), 1.0, 0.0]))
+            if not sol.success:
+                sol = sopt.root(iv_func, np.array([np.log(vol3[1]), -1.0, 0.0]))
+                if not sol.success:
+                    sol = sopt.root(iv_func, np.array([np.log(vol3[1]), 0.0, 0.0]), tol=1e-3)
+                    if not sol.success:
+                        sol = sopt.root(iv_func, np.array([np.log(vol3[1]), -1.0, 0.0]), tol=1e-3)
+                        if not sol.success:
+                            sol = sopt.root(iv_func, np.array([np.log(vol3[1]), 1.0, 0.0]), tol=1e-3)
         params = {
             "sigma": np.exp(sol.x[0]),
             "vov": np.exp(sol.x[1]),
