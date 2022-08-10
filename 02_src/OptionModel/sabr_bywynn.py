@@ -9,7 +9,7 @@ Created on Tue Jul  5 15:27:04 2022
 import math
 import numpy as np
 from scipy.stats import norm
-from scipy.optimize import minimize
+from scipy.optimize import minimize, brentq
 import matplotlib.pyplot as plt
 import copy
 
@@ -59,8 +59,8 @@ class BlackScholes:
         '''
         option_value = np.ones(len(self.y))
         if self.expiry == 0.0:
-            option_value[self.isCall] = np.maximum(self.S[self.isCall] - self.y[self.isCall], 0.0)
-            option_value[~self.isCall] = np.maximum(self.y[~self.isCall] - self.S[~self.isCall], 0.0)
+            option_value[self.isCall] = np.maximum(self.S - self.y[self.isCall], 0.0)
+            option_value[~self.isCall] = np.maximum(self.y[~self.isCall] - self.S, 0.0)
         else:
             d1 = self.dPlusBlack(vol = vol)
             d2 = self.dMinusBlack(vol = vol)
@@ -78,7 +78,7 @@ class BlackScholes:
     def blackVega(self, vol):
         return self.y * norm.pdf(self.dPlusBlack(vol)) * math.sqrt(self.expiry)
     
-    def blackIV(self, price, max_try = 10000, min_cent = 0.001):
+    def blackIV(self, price, max_try = 100000, min_cent = 0.001):
         '''
         No explicit method, use newton method to approximate
 
@@ -96,10 +96,12 @@ class BlackScholes:
             _bs_price = self.black(_vol)
             diff = price - _bs_price
             vega = self.blackVega(_vol)
-            if abs(diff).max() < min_cent:
+            if np.nanmax(abs(diff)) < min_cent:
                 return _vol
             _vol += diff/vega
         return _vol 
+    
+    
 
 class SABR():
     def __init__(self, y, expiry, S, r, isCall):
@@ -171,8 +173,8 @@ class SABR():
             volume[BS. y == strike] = volume[BS. y == strike]/np.sum(volume[BS. y == strike])*100
         
         def fun(args):
-            beta, nu, rho = args
-            alpha = bvol[atm_index] * F0 ** (1-beta)
+            alpha, beta, nu, rho = args
+            # alpha = bvol[atm_index] * F0 ** (1-beta)
             return ((bvol - self.haganLogNormalApprox(BS, alpha, beta, nu, rho)) ** 2 * np.log(volume)).sum()
         '''
         cons = ({'type': 'ineq', 'fun': lambda x: x[0]},\
@@ -180,14 +182,15 @@ class SABR():
                 {'type': 'ineq', 'fun': lambda x: x[2]+1},\
                 {'type': 'ineq', 'fun': lambda x: -x[2]+1})
         '''
+        b0 = (0.1, 0.5)
         b1 = (0, 1)
         b2 = (0, 10)
         b3 = (-1, 1)
         x0 = start_point
-        res = minimize(fun, x0, method = 'SLSQP', bounds=(b1, b2, b3))
+        res = minimize(fun, x0, method = 'SLSQP', bounds=(b0, b1, b2, b3))
         print(res.message)
 
-        return np.append(bvol[atm_index] * F0 ** (1-res.x[0]), res.x)
+        return res.x
     
     def haganFit_delta(self, BS, price, atm_index, start_point):
         '''
@@ -201,27 +204,27 @@ class SABR():
         bdelta = BS.blackDelta(bvol) * 100
         if True in np.isnan(bvol):
             return 'NaN in Black Implied Volatility Calculation'
-        F0 = BS.S * math.exp(BS.r * BS.expiry)
+        # F0 = BS.S * math.exp(BS.r * BS.expiry)
         
         def fun(args):
-            beta, nu, rho = args
-            alpha = bvol[atm_index] * F0 ** (1-beta)
-
-            return ((bvol - self.haganLogNormalApprox(BS, alpha, beta, nu, rho)) ** 2 * np.log(100 - np.abs(bdelta))).sum()
+            alpha, beta, nu, rho = args
+            # alpha = bvol[atm_index] * F0 ** (1-beta)
+            return ((bvol - self.haganLogNormalApprox(BS, alpha, beta, nu, rho)) ** 2 * (100 - np.abs(bdelta))).sum()
         '''
         cons = ({'type': 'ineq', 'fun': lambda x: x[0]},\
                 {'type': 'ineq', 'fun': lambda x: -x[0]+1},\
                 {'type': 'ineq', 'fun': lambda x: x[2]+1},\
                 {'type': 'ineq', 'fun': lambda x: -x[2]+1})
         '''
+        b0 = (0.1, 0.5)
         b1 = (0, 1)
         b2 = (0, 10)
         b3 = (-1, 1)
         x0 = start_point
-        res = minimize(fun, x0, method = 'SLSQP', bounds=(b1, b2, b3))
+        res = minimize(fun, x0, method = 'SLSQP', bounds=(b0, b1, b2, b3))
         print(res.message)
 
-        return np.append(bvol[atm_index] * F0 ** (1-res.x[0]), res.x)
+        return res.x
     
     def haganFit_split(self, BS, price, atm_index, start_point):
         '''
@@ -244,57 +247,56 @@ class SABR():
             atm_arg = (BS.y > BS.y[atm_index]-0.1)&(BS.y < BS.y[atm_index]+0.2)
         BS_atm = BlackScholes(BS.y[atm_arg], BS.expiry, BS.S, BS.r, BS.isCall[atm_arg])
         
-        F0 = BS.S * math.exp(BS.r * BS.expiry)
+        # F0 = BS.S * math.exp(BS.r * BS.expiry)
         
         def optimize_ls(BS, bvol, bdelta, start_point):
             def atm_fun(args):
-                beta, nu, rho = args
-                alpha = atm_vol * F0 ** (1-beta)
-
-                return ((bvol - self.haganLogNormalApprox(BS, alpha, beta, nu, rho)) ** 2 * np.log(100 - np.abs(bdelta))).sum()
-
+                alpha, beta, nu, rho = args
+                # alpha = atm_vol * F0 ** (1-beta)
+                return ((bvol - self.haganLogNormalApprox(BS, alpha, beta, nu, rho)) ** 2 * (100 - np.abs(bdelta))).sum()
             '''
             cons = ({'type': 'ineq', 'fun': lambda x: x[0]},\
                     {'type': 'ineq', 'fun': lambda x: -x[0]+1},\
                     {'type': 'ineq', 'fun': lambda x: x[2]+1},\
                     {'type': 'ineq', 'fun': lambda x: -x[2]+1})
             '''
+            b0 = (0.1, 0.5)
             b1 = (0, 1)
             b2 = (0, 10)
             b3 = (-1, 1)
-            res = minimize(atm_fun, start_point, method = 'SLSQP', bounds=(b1, b2, b3))
+            res = minimize(atm_fun, start_point, method = 'SLSQP', bounds=(b0, b1, b2, b3))
             return res
         
-        x0 = np.array([1, 2.8, -0.2])
+        x0 = np.array([0.2, 1, 2.8, -0.2])
         if len(np.unique(BS.y)) >= 4:
             res = optimize_ls(BS_atm, bvol[atm_arg], bdelta[atm_arg], x0)
-            bvol[atm_arg] = self.haganLogNormalApprox(BS_atm, atm_vol * F0 ** (1-res.x[0]), res.x[0], res.x[1], res.x[2])
+            bvol[atm_arg] = self.haganLogNormalApprox(BS_atm, res.x[0], res.x[1], res.x[2], res.x[3])
             y_low = np.sort(np.unique(BS.y))[1]
             low_arg = (BS.y <= y_low)
             BS_low = BlackScholes(BS.y[low_arg], BS.expiry, BS.S, BS.r, BS.isCall[low_arg])
             res = optimize_ls(BS_low, bvol[low_arg], bdelta[low_arg], x0)
-            bvol[low_arg] = self.haganLogNormalApprox(BS_low, atm_vol * F0 ** (1-res.x[0]), res.x[0], res.x[1], res.x[2])
+            bvol[low_arg] = self.haganLogNormalApprox(BS_low, res.x[0], res.x[1], res.x[2], res.x[3])
             y_high = np.sort(np.unique(BS.y))[-2]
             high_arg = (BS.y >= y_high)
             BS_high = BlackScholes(BS.y[high_arg], BS.expiry, BS.S, BS.r, BS.isCall[high_arg])
             res = optimize_ls(BS_high, bvol[high_arg], bdelta[high_arg], x0)
-            bvol[high_arg] = self.haganLogNormalApprox(BS_high, atm_vol * F0 ** (1-res.x[0]), res.x[0], res.x[1], res.x[2]) 
+            bvol[high_arg] = self.haganLogNormalApprox(BS_high, res.x[0], res.x[1], res.x[2], res.x[3]) 
         else:
             y_low = np.sort(np.unique(BS.y))[1]
             low_arg = (BS.y <= y_low)
             BS_low = BlackScholes(BS.y[low_arg], BS.expiry, BS.S, BS.r, BS.isCall[low_arg])
             res = optimize_ls(BS_low, bvol[low_arg], bdelta[low_arg], x0)
-            bvol[low_arg] = self.haganLogNormalApprox(BS_low, atm_vol * F0 ** (1-res.x[0]), res.x[0], res.x[1], res.x[2])
+            bvol[low_arg] = self.haganLogNormalApprox(BS_low, res.x[0], res.x[1], res.x[2], res.x[3])
             y_high = np.sort(np.unique(BS.y))[-2]
             high_arg = (BS.y >= y_high)
             BS_high = BlackScholes(BS.y[high_arg], BS.expiry, BS.S, BS.r, BS.isCall[high_arg])
             res = optimize_ls(BS_high, bvol[high_arg], bdelta[high_arg], x0)
-            bvol[high_arg] = self.haganLogNormalApprox(BS_high, atm_vol * F0 ** (1-res.x[0]), res.x[0], res.x[1], res.x[2])
+            bvol[high_arg] = self.haganLogNormalApprox(BS_high, res.x[0], res.x[1], res.x[2], res.x[3])
         
         res = optimize_ls(BS, bvol, bdelta, start_point)
         print(res.message)
         
-        return np.append(atm_vol * F0 ** (1-res.x[0]), res.x)
+        return res.x
     
     def haganPlot(self, BS, price, param):
         bvol = BS.blackIV(price)
