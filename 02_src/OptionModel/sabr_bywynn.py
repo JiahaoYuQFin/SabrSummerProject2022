@@ -206,6 +206,7 @@ class SABR():
         def fun(args):
             beta, nu, rho = args
             alpha = bvol[atm_index] * F0 ** (1-beta)
+
             return ((bvol - self.haganLogNormalApprox(BS, alpha, beta, nu, rho)) ** 2 * np.log(100 - np.abs(bdelta))).sum()
         '''
         cons = ({'type': 'ineq', 'fun': lambda x: x[0]},\
@@ -249,7 +250,9 @@ class SABR():
             def atm_fun(args):
                 beta, nu, rho = args
                 alpha = atm_vol * F0 ** (1-beta)
+
                 return ((bvol - self.haganLogNormalApprox(BS, alpha, beta, nu, rho)) ** 2 * np.log(100 - np.abs(bdelta))).sum()
+
             '''
             cons = ({'type': 'ineq', 'fun': lambda x: x[0]},\
                     {'type': 'ineq', 'fun': lambda x: -x[0]+1},\
