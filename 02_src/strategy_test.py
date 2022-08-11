@@ -22,9 +22,12 @@ class OptionStra:
                                     how='left').ffill()#.set_index(['code'])
 
         # sabrmodel = SabrHagan2002(sigma=0.2, beta=0.5, intr=0.0278, divr=0.0195)
-        df_opt_new = df_opt_merge.groupby(['time'], as_index=False).apply(
-            lambda x: window_of_greek(x)).set_index(['time', 'code'])
+        df_opt_new = (df_opt_merge.groupby(['time'], as_index=False).apply(
+            lambda x: window_of_greek(x))).set_index(['time', 'code'])
         return df_opt_new
+
+    def straddle(self):
+        return 0
 
 
 def window_of_greek_onesurface(df: pd.DataFrame, nearest_num=3):
@@ -40,6 +43,7 @@ def window_of_greek(df: pd.DataFrame, nearest_num=3):
     model = SabrHagan2002(sigma=0.2, beta=0.5, intr=0.0199, divr=0.0198)
 
     df_new = df.iloc[(df['strike']-df['close_stock']).abs().argsort()].copy(deep=True)
+
     idx_call = (df_new['type'] == 1)
     idx_put = (df_new['type'] == -1)
     cprice = df_new.loc[idx_call, 'close'].values
@@ -50,6 +54,14 @@ def window_of_greek(df: pd.DataFrame, nearest_num=3):
     texp = df_new['texp'].values[0]
     df_new.loc[idx_call, 'bs_iv'] = model.impvol(price=cprice, strike=cstrike, spot=spot, texp=texp, cp=1)
     df_new.loc[idx_put, 'bs_iv'] = model.impvol(price=pprice, strike=pstrike, spot=spot, texp=texp, cp=-1)
+
+    # drop options with bs_iv equal to NaN
+    # idx_call_ivnotnull = df_new.query("type==1 & bs_iv.notna()").index
+    # idx_put_ivnotnull = df_new.query("type==-1 & bs_iv.notna()").index
+    # cprice = df_new.loc[idx_call_ivnotnull, 'close'].values
+    # cstrike = df_new.loc[idx_call_ivnotnull, 'strike'].values
+    # pprice = df_new.loc[idx_put_ivnotnull, 'close'].values
+    # pstrike = df_new.loc[idx_put_ivnotnull, 'strike'].values
 
     # call
     call_arr = df_new.loc[idx_call, ['bs_iv', 'strike']].iloc[:nearest_num].sort_values('strike').values
@@ -77,10 +89,11 @@ def window_of_greek(df: pd.DataFrame, nearest_num=3):
 
 def execute():
     etf_path = r'../03_data/300etf.pkl'
-    option_path = r'../03_data/300etf_option2208.pkl'
+    option_path = r'../03_data/300etf_option2207.pkl'
     df_etf = pd.read_pickle(etf_path)
     df_opt = pd.read_pickle(option_path)
-    model = OptionStra(df_opt=df_opt.query("time>='2022-07-06 09:45:00'"), df_stock=df_etf)
+    # e
+    model = OptionStra(df_opt=df_opt.query("time>='2022-06-16 09:45:00'"), df_stock=df_etf)
     res = model.get_greeks()
 
 

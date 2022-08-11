@@ -14,7 +14,7 @@ class OptABC(abc.ABC):
     is_fwd = False
 
     IMPVOL_TOL = 1e-10
-    IMPVOL_MAXVOL = 99.99
+    IMPVOL_MAXVOL = 0.9999
 
     def __init__(self, sigma, intr=0.0, divr=0.0, is_fwd=False):
         """
@@ -132,7 +132,7 @@ class OptABC(abc.ABC):
             elif _price < p_min[k] or p_max[k] < _price:
                 sigma[k] = np.nan
             else:
-                sigma[k] = sopt.brentq(iv_func, 0.0, 10)
+                sigma[k] = sopt.brentq(iv_func, 0.0, 1.0)
 
         if scalar_output:
             sigma = sigma[0]

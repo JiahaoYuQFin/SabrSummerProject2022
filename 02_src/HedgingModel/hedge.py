@@ -12,6 +12,7 @@ import numpy as np
 特殊期权组合
 '''
 
+
 def Put_Call_Parity_l(df, by_rank = 1):
     '''
     long option put call parity
@@ -34,6 +35,7 @@ def Put_Call_Parity_l(df, by_rank = 1):
     parity_l = pd.concat([parity_c, parity_p])
     
     return pd.merge(df, parity_l[['time', 'code', 'profit_position']], on = ['time', 'code'])
+
 
 def Put_Call_Parity_s(df, by_rank = 1):
     '''
