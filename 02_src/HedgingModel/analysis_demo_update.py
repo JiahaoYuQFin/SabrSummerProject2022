@@ -46,7 +46,7 @@ sabr2207 = sabr2207.groupby('time').apply(gen_price)
 #time1 = np.unique(sabr2207['time'])[480]
 #try1 = sabr2207.loc[(sabr2207['time']>=time0)&(sabr2207['time']<time1), :]
 sabr2207['signal'] = sabr2207['close'] - sabr2207['price']
-sabr2207['signal'] = sabr2207.groupby('code')['signal'].shift()
+sabr2207[['signal','delta', 'vega', 'gamma', 'theta']] = sabr2207.groupby('code')[['signal','delta', 'vega', 'gamma', 'theta']].shift()
 
 import hedge_update
 
