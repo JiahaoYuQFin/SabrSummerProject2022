@@ -167,6 +167,7 @@ def Hedge_ATM(df, bar = 1.5e-4, delta_tolerance = 0):
                 instrument_code = instruments.loc[np.abs(instruments['strike price'] - spot).idxmin(), 'code']
                 df.loc[df['code'] == instrument_code, 'hedge_position'] = -round(delta/df.loc[df['code'] == instrument_code, 'delta'])
     
+    df['hedge_position'] = round(df['hedge_position'])
     exist_position = df.copy()
     
     return df
@@ -215,7 +216,7 @@ def Hedge_Vega(df, bar = 1.5e-4, delta_tolerance = 0, vega_tolerance = 0):
                 instrument_code = instruments.loc[np.abs(instruments['strike price'] - spot).idxmin(), 'code']
                 df.loc[df['code'] == instrument_code, 'hedge_position'] = -round(delta/df.loc[df['code'] == instrument_code, 'delta']) 
         
-    
+    df['hedge_position'] = round(df['hedge_position'])
     exist_position = df.copy()
     
     return df
