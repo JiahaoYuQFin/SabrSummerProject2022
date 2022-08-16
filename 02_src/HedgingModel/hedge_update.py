@@ -102,10 +102,11 @@ def Option_Position_Add(df, quota = 0.5, trade_limit = 0.05, contract_limit = 0.
     df = pd.merge(df, exist_position[['code', 'current_position']], how = 'left', on = 'code')
     df['position_available'] = np.abs(df['volume'] * quota)
     df.loc[(df['profit_position']*df['current_position'])<=0, 'current_position'] = 0
-    limit_position = notional_limit * trade_limit/spot/10000
+    limit_position = notional_limit * contract_limit/spot/10000
     df['position_trade'] = limit_position - np.abs(df['current_position'])
     df['position_available'] = df[['position_trade', 'position_available']].min(axis=1)
-    df['position_available'] = df['position_available'].apply(lambda x: max(x, 0))
+    trade_limit  = notional_limit * trade_limit/spot/10000
+    df['position_available'] = df['position_available'].apply(lambda x: max(min(x, trade_limit), 0))
     df['profit_position'] = df['profit_position'].values * df['position_available'] + df['current_position']
     df['profit_position'] = df['profit_position'].fillna(0)
     df['profit_position'] = df['profit_position'].astype(int)
