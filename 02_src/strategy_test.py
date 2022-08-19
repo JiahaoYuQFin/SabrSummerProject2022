@@ -6,6 +6,7 @@ Created on 2022/8/4 13:45
 from OptionModel.sabr import SabrHagan2002
 import pandas as pd
 import numpy as np
+import scipy.optimize as sopt
 
 
 class OptionStra:
@@ -26,17 +27,30 @@ class OptionStra:
             lambda x: window_of_greek(x))).set_index(['time', 'code'])
         return df_opt_new
 
-    def straddle(self):
-        return 0
+    def straddle(self, df_greeks: pd.DataFrame) -> pd.DataFrame:
+        df_pos = df_greeks.reset_index().groupby('time', as_index=False).apply(lambda x: window_of_straddle(x))
+        df_pos['position'] = df_pos.groupby('code')['position'].shift(1).fillna(0)
+        df_pos = df_pos.set_index(['time', 'code'])
+        return df_pos[['open', 'high', 'low', 'close', 'volume', 'position']]
 
 
-def window_of_greek_onesurface(df: pd.DataFrame, nearest_num=3):
-    model = SabrHagan2002(sigma=0.2, beta=0.5, intr=0.0278, divr=0.0195)
-
-    df_new = df.iloc[(df['strike']-df['close_stock']).abs().argsort()].copy(deep=True)
-    idx_call = (df_new['type'] == 1)
-    idx_put = (df_new['type'] == -1)
-    return df_new
+def window_of_straddle(df: pd.DataFrame, num: int = 1):
+    assert 0 < num < 5
+    df_pool = df.query("((type==1)&(0.1<delta<0.9))|((type==-1)&(-0.9<delta<-0.1))").copy(deep=True)
+    texp = df_pool['texp'].unique()
+    target_texp = texp[0] if (texp[0] >= (2.5 / 24 / 365)) & ((df_pool['texp'] == texp[0]).sum() > 3) else texp[1]
+    df_pool = df_pool[df_pool['texp'] == target_texp]
+    strikes = df_pool['strike'].unique()
+    for i in range(num):
+        idx_strike = df_pool.query("strike==@strikes[@i]").index
+        while idx_strike.size < 2:
+            i += 1
+            idx_strike = df_pool.query("strike==@strikes[@i]").index
+        a = np.vstack([df_pool.loc[idx_strike, 'delta'].tolist(), [1, 1]])
+        b = np.array([0, 1])
+        x = np.linalg.solve(a, b)
+        df.loc[idx_strike, 'position'] = x
+    return df
 
 
 def window_of_greek(df: pd.DataFrame, nearest_num=3):
@@ -73,6 +87,8 @@ def window_of_greek(df: pd.DataFrame, nearest_num=3):
     df_new.loc[idx_call, 'gamma'] = model.gamma(strike=cstrike, spot=spot, texp=texp, cp=1)
     df_new.loc[idx_call, 'theta'] = model.theta(strike=cstrike, spot=spot, texp=texp, cp=1)
     df_new.loc[idx_call, 'vega'] = model.vega(strike=cstrike, spot=spot, texp=texp, cp=1)
+    df_new.loc[idx_call, 'vanna'] = model.vanna_numeric(strike=cstrike, spot=spot, texp=texp, cp=1)
+    df_new.loc[idx_call, 'volga'] = model.volga_numeric(strike=cstrike, spot=spot, texp=texp, cp=1)
 
     # put
     put_arr = df_new.loc[idx_put, ['bs_iv', 'strike']].iloc[:nearest_num].sort_values('strike').values
@@ -84,18 +100,7 @@ def window_of_greek(df: pd.DataFrame, nearest_num=3):
     df_new.loc[idx_put, 'gamma'] = model.gamma(strike=pstrike, spot=spot, texp=texp, cp=-1)
     df_new.loc[idx_put, 'theta'] = model.theta(strike=pstrike, spot=spot, texp=texp, cp=-1)
     df_new.loc[idx_put, 'vega'] = model.vega(strike=pstrike, spot=spot, texp=texp, cp=-1)
+    df_new.loc[idx_put, 'vanna'] = model.vanna_numeric(strike=pstrike, spot=spot, texp=texp, cp=-1)
+    df_new.loc[idx_put, 'volga'] = model.volga_numeric(strike=pstrike, spot=spot, texp=texp, cp=-1)
+
     return df_new
-
-
-def execute():
-    etf_path = r'../03_data/300etf.pkl'
-    option_path = r'../03_data/300etf_option2207.pkl'
-    df_etf = pd.read_pickle(etf_path)
-    df_opt = pd.read_pickle(option_path)
-    # e
-    model = OptionStra(df_opt=df_opt.query("time>='2022-06-16 09:45:00'"), df_stock=df_etf)
-    res = model.get_greeks()
-
-
-if __name__ == '__main__':
-    execute()

@@ -157,7 +157,7 @@ class OptABC(abc.ABC):
         Returns:
             delta value
         """
-        h = spot * 0.001
+        h = spot * 1e-3
         delta = (
             self.price(strike, spot + h, texp, cp) -
             self.price(strike, spot - h, texp, cp)
@@ -177,7 +177,7 @@ class OptABC(abc.ABC):
         Returns:
             Delta with numerical derivative
         """
-        h = spot * 0.001
+        h = spot * 1e-3
         gamma = (
             self.price(strike, spot + h, texp, cp)
             - 2 * self.price(strike, spot, texp, cp)
@@ -198,7 +198,7 @@ class OptABC(abc.ABC):
         Returns:
             vega value
         """
-        h = 0.001
+        h = 1e-3
         model = copy.copy(self)
         model.sigma += h
         p_up = model.price(strike, spot, texp, cp)
@@ -221,12 +221,57 @@ class OptABC(abc.ABC):
         Returns:
             theta value
         """
-        dt = np.minimum(5/60/24/365.25, texp)  # 5 minutes
+        dt = np.minimum(5/60/24/365, texp)  # 5 minutes
         theta = self.price(strike, spot, texp - dt, cp) - self.price(
             strike, spot, texp, cp
         )
         theta /= dt
         return theta
+
+    def vanna_numeric(self, strike, spot, texp, cp=1):
+        """
+        Option model vanna (cross-derivative to price and volatility) by finite difference
+
+        Args:
+            strike: strike price
+            spot: spot price
+            texp: time to expiry
+            cp: 1/-1 for call/put
+
+        Returns:
+            vanna value
+        """
+        h = 1e-3
+        vega_up = self.vega_numeric(strike, spot + h, texp, cp)
+        vega_dn = self.vega_numeric(strike, spot - h, texp, cp)
+
+        vanna = (vega_up - vega_dn) / (2 * h)
+        return vanna
+
+    def volga_numeric(self, strike, spot, texp, cp=1):
+        """
+        Option model volga (2nd derivative to volatility) by finite difference
+
+        Args:
+            strike: strike price
+            spot: spot price
+            texp: time to expiry
+            cp: 1/-1 for call/put
+
+        Returns:
+            volga value
+        """
+        h = 1e-3
+        model = copy.copy(self)
+
+        p_0 = model.price(strike, spot, texp, cp)
+        model.sigma += h
+        p_up = model.price(strike, spot, texp, cp)
+        model.sigma -= 2 * h
+        p_dn = model.price(strike, spot, texp, cp)
+
+        volga = (p_up + p_dn - 2 * p_0) / (h * h)
+        return volga
 
     # create aliases
     delta = delta_numeric
