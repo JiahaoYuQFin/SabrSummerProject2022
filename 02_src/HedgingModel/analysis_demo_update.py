@@ -89,6 +89,7 @@ timen = pcpl1['time'].sort_values().iloc[-1]
 
 # 开仓价为上一个tick的close
 pcpl1['open price'] = pcpl1.groupby('code')['close'].shift()
+# pcpl1['open price'] = pcpl1['open']
 
 pcpl1['profit_position_diff'] = pcpl1.groupby('code')['profit_position'].diff()
 pcpl1.loc[pcpl1['time'] == time0, 'profit_position_diff'] = pcpl1.loc[pcpl1['time'] == time0, 'profit_position']
@@ -101,14 +102,14 @@ pcpl1.loc[pcpl1['time'] == time0, 'hedge_position_diff'] = pcpl1.loc[pcpl1['time
 pcpl1.loc[pcpl1['type'] != 'S', 'hedge_cost'] = np.abs(pcpl1.loc[pcpl1['type'] != 'S', 'hedge_position_diff']) * 1.3
 pcpl1.loc[(pcpl1['type'] != 'S')&(pcpl1['position'] < 0)&(pcpl1['hedge_position_diff'] < 0), 'hedge_cost'] = 0
 pcpl1.loc[pcpl1['type'] == 'S', 'hedge_cost'] = np.abs(pcpl1.loc[pcpl1['type'] == 'S', 'hedge_position_diff']) * 0.4 * pcpl1.loc[pcpl1['type'] == 'S', 'close']
-pcpl1.loc[(pcpl1['type'] == 'S')&(pcpl1['hedge_position'] < 0)&(pcpl1['hedge_position_diff'] < 0), 'hedge_cost'] = np.abs(pcpl1.loc[(pcpl1['type'] == 'S')&(pcpl1['hedge_position'] < 0)&(pcpl1['hedge_position_diff'] < 0), 'hedge_position_diff']) * 3 * pcpl1.loc[(pcpl1['type'] == 'S')&(pcpl1['hedge_position'] < 0)&(pcpl1['hedge_position_diff'] < 0), 'open price']
+pcpl1.loc[(pcpl1['type'] == 'S')&(pcpl1['hedge_position'] < 0)&(pcpl1['hedge_position_diff'] < 0), 'hedge_cost'] = np.abs(pcpl1.loc[(pcpl1['type'] == 'S')&(pcpl1['hedge_position'] < 0)&(pcpl1['hedge_position_diff'] < 0), 'hedge_position']) * 0.05 * pcpl1.loc[(pcpl1['type'] == 'S')&(pcpl1['hedge_position'] < 0)&(pcpl1['hedge_position_diff'] < 0), 'open price']
 
 pcpl1['position_diff'] = pcpl1.groupby('code')['position'].diff()
 pcpl1.loc[pcpl1['time'] == time0, 'position_diff'] = pcpl1.loc[pcpl1['time'] == time0, 'position']
 pcpl1.loc[pcpl1['type'] != 'S', 'cost'] = np.abs(pcpl1.loc[pcpl1['type'] != 'S', 'position_diff']) * 1.3
 pcpl1.loc[(pcpl1['type'] != 'S')&(pcpl1['position'] < 0)&(pcpl1['position_diff'] < 0), 'cost'] = 0
 pcpl1.loc[pcpl1['type'] == 'S', 'cost'] = np.abs(pcpl1.loc[pcpl1['type'] == 'S', 'position_diff']) * 0.4 * pcpl1.loc[pcpl1['type'] == 'S', 'close']
-pcpl1.loc[(pcpl1['type'] == 'S')&(pcpl1['position'] < 0)&(pcpl1['position_diff'] < 0), 'cost'] = np.abs(pcpl1.loc[(pcpl1['type'] == 'S')&(pcpl1['position'] < 0)&(pcpl1['position_diff'] < 0), 'position_diff']) * 3 * pcpl1.loc[(pcpl1['type'] == 'S')&(pcpl1['position'] < 0)&(pcpl1['position_diff'] < 0), 'open price']
+pcpl1.loc[(pcpl1['type'] == 'S')&(pcpl1['position'] < 0)&(pcpl1['position_diff'] < 0), 'cost'] = np.abs(pcpl1.loc[(pcpl1['type'] == 'S')&(pcpl1['position'] < 0)&(pcpl1['position_diff'] < 0), 'position']) * 0.05 * pcpl1.loc[(pcpl1['type'] == 'S')&(pcpl1['position'] < 0)&(pcpl1['position_diff'] < 0), 'open price']
 
 
 # cash = pcpl1.groupby('time')['cash_diff'].sum()
@@ -180,3 +181,36 @@ ax2.legend()
 plt.title('Position Fluctuate', fontsize=16)
 plt.show()   
 
+# 策略评价指标
+strategy = {}
+# initial capital as 3e7
+ret = pcpl1.groupby('time')['cash_net'].sum().cumsum()/3e7 + 1
+strategy['annualized return'] = ret[-1] ** (1/pcpl1['time_to_mature'].max()) - 1
+strategy['sharpe ratio'] = (strategy['annualized return'] - 0.04) / ret.pct_change().std()*np.sqrt(250*48)
+strategy['maximum drawdown'] = (ret - ret.cummax()).min()
+strategy['win ratio'] = (ret.pct_change() > 0).sum()/len(ret)
+print(pd.DataFrame(strategy, index = [0]))
+
+u0 = -1.8e-3
+u1 = -1e-3
+u2 = 0
+u3 = 6e-4
+u4 = 1e-3
+
+param_dict_ = {'vega_tolerance':90, 'trade_volume':100, 'quota':0.5}
+pcpl1 = hedge_update.Hedge_Transform(sabr2207, etf)
+pcpl1['profit_position'] = 0
+pcpl1.loc[pcpl1['signal'] <= u0, 'group'] = 5
+pcpl1.loc[(pcpl1['signal'] <= u1)&(pcpl1['signal'] > u0), 'group'] = 4
+pcpl1.loc[(pcpl1['signal'] <= u2)&(pcpl1['signal'] > u1), 'group'] = 3
+pcpl1.loc[(pcpl1['signal'] <= u3)&(pcpl1['signal'] > u2), 'group'] = 2
+pcpl1.loc[(pcpl1['signal'] <= u4)&(pcpl1['signal'] > u3), 'group'] = 1
+pcpl1.loc[pcpl1['signal'] > u4, 'group'] = 0
+hedge_update.Global_Exist(pcpl1)
+pcpl1 = pcpl1.groupby('time').progress_apply(hedge_update.Hedge_Open_Slow, **param_dict_).reset_index(drop = True)
+
+
+
+pcpl1['option1'] = pcpl1.groupby('code')['option'].shift(-1)
+option = 5
+pcpl1.loc[pcpl1['option'] == option, 'option1'].value_counts()/len(pcpl1.loc[pcpl1['option'] == option, 'option1'])
