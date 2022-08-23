@@ -25,8 +25,8 @@ data_path = '/Users/chenwynn/Documents/Intern_project/HTSC_Summer/team/SabrSumme
 f = open(os.path.join(data_path, '300etf_2207_sabr_v1.pkl'),'rb')
 sabr2207 = pickle.load(f)
 sabr2207 = sabr2207.loc[:26173, :]
-# f = open(os.path.join(data_path, '300etf_2208_sabr_v1.pkl'),'rb')
-# sabr2207 = pickle.load(f)
+f = open(os.path.join(data_path, '300etf_2208_sabr_v1.pkl'),'rb')
+sabr2207 = pickle.load(f)
 
 '''
 f = open(os.path.join(data_path, 'greeks_2207_v1.pkl'),'rb')
@@ -74,12 +74,34 @@ pcpl1 = pcpl1.groupby('time').progress_apply(hedge_update.Hedge_Vega, **hedge_di
 
 pcpl1.to_pickle('/Users/chenwynn/Documents/Intern_project/HTSC_Summer/sabr_vol/strat.pkl')
 '''
+# strategy 1
 param_dict_ = {'profit':1e-3, 'hedge':8e-4, 'delta_tolerance':20, 'vega_tolerance':90, 'trade_volume':100, 'quota':0.5}
 pcpl1 = hedge_update.Hedge_Transform(sabr2207, etf)
 pcpl1['profit_position'] = 0
 hedge_update.Global_Exist(pcpl1)
 pcpl1 = pcpl1.groupby('time').progress_apply(hedge_update.Hedge_Open, **param_dict_).reset_index(drop = True)
 
+# strategy 2
+u0 = -1.8e-3
+u1 = -1e-3
+u2 = 0
+u3 = 6e-4
+u4 = 1e-3
+
+param_dict_ = {'vega_tolerance':90, 'trade_volume':100, 'quota':0.5}
+pcpl1 = hedge_update.Hedge_Transform(sabr2207, etf)
+pcpl1['profit_position'] = 0
+pcpl1.loc[pcpl1['signal'] <= u0, 'group'] = 5
+pcpl1.loc[(pcpl1['signal'] <= u1)&(pcpl1['signal'] > u0), 'group'] = 4
+pcpl1.loc[(pcpl1['signal'] <= u2)&(pcpl1['signal'] > u1), 'group'] = 3
+pcpl1.loc[(pcpl1['signal'] <= u3)&(pcpl1['signal'] > u2), 'group'] = 2
+pcpl1.loc[(pcpl1['signal'] <= u4)&(pcpl1['signal'] > u3), 'group'] = 1
+pcpl1.loc[pcpl1['signal'] > u4, 'group'] = 0
+hedge_update.Global_Exist(pcpl1)
+pcpl1 = pcpl1.groupby('time').progress_apply(hedge_update.Hedge_Open_Slow, **param_dict_).reset_index()
+
+
+# 回测
 
 pcpl1['position'] = pcpl1['profit_position'] + pcpl1['hedge_position']
 
@@ -184,33 +206,10 @@ plt.show()
 # 策略评价指标
 strategy = {}
 # initial capital as 3e7
-ret = pcpl1.groupby('time')['cash_net'].sum().cumsum()/3e7 + 1
+ret = pcpl1.groupby('time')['cash_net'].sum().cumsum()/1e7 + 1
 strategy['annualized return'] = ret[-1] ** (1/pcpl1['time_to_mature'].max()) - 1
 strategy['sharpe ratio'] = (strategy['annualized return'] - 0.04) / ret.pct_change().std()*np.sqrt(250*48)
 strategy['maximum drawdown'] = (ret - ret.cummax()).min()
 strategy['win ratio'] = (ret.pct_change() > 0).sum()/len(ret)
 print(pd.DataFrame(strategy, index = [0]))
 
-u0 = -1.8e-3
-u1 = -1e-3
-u2 = 0
-u3 = 6e-4
-u4 = 1e-3
-
-param_dict_ = {'vega_tolerance':90, 'trade_volume':100, 'quota':0.5}
-pcpl1 = hedge_update.Hedge_Transform(sabr2207, etf)
-pcpl1['profit_position'] = 0
-pcpl1.loc[pcpl1['signal'] <= u0, 'group'] = 5
-pcpl1.loc[(pcpl1['signal'] <= u1)&(pcpl1['signal'] > u0), 'group'] = 4
-pcpl1.loc[(pcpl1['signal'] <= u2)&(pcpl1['signal'] > u1), 'group'] = 3
-pcpl1.loc[(pcpl1['signal'] <= u3)&(pcpl1['signal'] > u2), 'group'] = 2
-pcpl1.loc[(pcpl1['signal'] <= u4)&(pcpl1['signal'] > u3), 'group'] = 1
-pcpl1.loc[pcpl1['signal'] > u4, 'group'] = 0
-hedge_update.Global_Exist(pcpl1)
-pcpl1 = pcpl1.groupby('time').progress_apply(hedge_update.Hedge_Open_Slow, **param_dict_).reset_index(drop = True)
-
-
-
-pcpl1['option1'] = pcpl1.groupby('code')['option'].shift(-1)
-option = 5
-pcpl1.loc[pcpl1['option'] == option, 'option1'].value_counts()/len(pcpl1.loc[pcpl1['option'] == option, 'option1'])

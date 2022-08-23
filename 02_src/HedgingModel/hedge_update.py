@@ -389,14 +389,14 @@ def Hedge_Open_Slow(df, vega_tolerance, trade_volume, quota):
     df.loc[(df['profit_position'] > 0)&(df['group'] == 5), 'scale'] = 0.5
     df.loc[(df['profit_position'] > 0)&(df['group'] == 3), 'scale'] = df.loc[(df['profit_position'] > 0)&(df['group'] == 3), 'profit_position'].apply(lambda x: -min(0.25, x/trade_volume))
     df.loc[(df['profit_position'] > 0)&(df['group'] == 2), 'scale'] = df.loc[(df['profit_position'] > 0)&(df['group'] == 2), 'profit_position'].apply(lambda x: -min(0.75, x/trade_volume))
-    df.loc[(df['profit_position'] > 0)&(df['group'] <= 1), 'profit_position'] = 0
-    df.loc[(df['profit_position'] > 0)&(df['group'] == 0), 'scale'] = -1
+    df.loc[(df['profit_position'] > 0)&(df['group'] == 0), 'scale'] = -df.loc[(df['profit_position'] > 0)&(df['group'] == 0), :].apply(lambda x: min(1, max(0, (x['volume']*quota - x['profit_position'])/trade_volume)), axis=1)
+    df.loc[(df['profit_position'] > 0)&(df['group'] <= 1), 'profit_position'] = df.loc[(df['profit_position'] > 0)&(df['group'] <= 1), :].apply(lambda x: max(0, x['profit_position'] - x['volume']*quota), axis=1)
     
     df.loc[(df['profit_position'] < 0)&(df['group'] == 0), 'scale'] = -0.5
     df.loc[(df['profit_position'] < 0)&(df['group'] == 2), 'scale'] = df.loc[(df['profit_position'] < 0)&(df['group'] == 2), 'profit_position'].apply(lambda x: min(0.25, -x/trade_volume))
     df.loc[(df['profit_position'] < 0)&(df['group'] == 3), 'scale'] = df.loc[(df['profit_position'] < 0)&(df['group'] == 3), 'profit_position'].apply(lambda x: min(0.75, -x/trade_volume))
-    df.loc[(df['profit_position'] < 0)&(df['group'] >= 4), 'profit_position'] = 0
-    df.loc[(df['profit_position'] < 0)&(df['group'] == 5), 'scale'] = 1
+    df.loc[(df['profit_position'] < 0)&(df['group'] == 5), 'scale'] = df.loc[(df['profit_position'] < 0)&(df['group'] == 5), :].apply(lambda x: min(1, max(0, (x['volume']*quota + x['profit_position'])/trade_volume)), axis=1)
+    df.loc[(df['profit_position'] < 0)&(df['group'] >= 4), 'profit_position'] = df.loc[(df['profit_position'] < 0)&(df['group'] >= 4), :].apply(lambda x: min(0, x['profit_position'] + x['volume']*quota), axis=1)
     
     df.loc[df['scale']!=0, 'hedge_position'] = 0
     # df['direction'] = np.sign(df['scale'])
@@ -408,26 +408,26 @@ def Hedge_Open_Slow(df, vega_tolerance, trade_volume, quota):
         if abs(vega) < 2/3 * vega_tolerance:
             p_instrument = instruments.loc[np.abs(instruments['scale']) == np.abs(instruments['scale']).max(), :]
             code = p_instrument.loc[np.abs(p_instrument['signal']).idxmax(), 'code']
-            df.loc[df['code'] == code, 'profit_position'] = df.loc[df['code'] == code, 'profit_position'] + df.loc[df['code'] == code, 'scale'] * min(trade_volume, df.loc[df['code'] == code, 'volume'].values * quota)
+            df.loc[df['code'] == code, 'profit_position'] = df.loc[df['code'] == code, 'profit_position'] + np.sign(df.loc[df['code'] == code, 'scale']) * min(np.abs(df.loc[df['code'] == code, 'scale'].values) * trade_volume, df.loc[df['code'] == code, 'volume'].values * quota)
             df.loc[df['code'] == code, 'rolled'] = 1
         elif abs(vega) < vega_tolerance:
             p_instrument = instruments.loc[instruments['scale']*np.sign(vega)<0, :]
             if len(p_instrument) > 0:
                 p_instrument = p_instrument.loc[np.abs(p_instrument['scale']) == np.abs(p_instrument['scale']).max(), :]
                 code = p_instrument.loc[np.abs(p_instrument['signal']).idxmax(), 'code']
-                df.loc[df['code'] == code, 'profit_position'] = df.loc[df['code'] == code, 'profit_position'] + df.loc[df['code'] == code, 'scale'] * min(trade_volume, df.loc[df['code'] == code, 'volume'].values * quota)
+                df.loc[df['code'] == code, 'profit_position'] = df.loc[df['code'] == code, 'profit_position'] + np.sign(df.loc[df['code'] == code, 'scale']) * min(np.abs(df.loc[df['code'] == code, 'scale'].values) * trade_volume, df.loc[df['code'] == code, 'volume'].values * quota)
                 df.loc[df['code'] == code, 'rolled'] = 1
             else:
                 p_instrument = instruments.loc[np.abs(instruments['scale']) == np.abs(instruments['scale']).max(), :]
                 code = p_instrument.loc[np.abs(p_instrument['signal']).idxmax(), 'code']
-                df.loc[df['code'] == code, 'profit_position'] = df.loc[df['code'] == code, 'profit_position'] + df.loc[df['code'] == code, 'scale'] * min(trade_volume * 0.5, df.loc[df['code'] == code, 'volume'].values * quota)
+                df.loc[df['code'] == code, 'profit_position'] = df.loc[df['code'] == code, 'profit_position'] + np.sign(df.loc[df['code'] == code, 'scale']) * min(np.abs(df.loc[df['code'] == code, 'scale'].values) * trade_volume * 0.5, df.loc[df['code'] == code, 'volume'].values * quota)
                 df.loc[df['code'] == code, 'rolled'] = 1
         else:
             p_instrument = instruments.loc[instruments['scale']*np.sign(vega)<0, :]
             if len(p_instrument) > 0:
                 p_instrument = p_instrument.loc[np.abs(p_instrument['scale']) == np.abs(p_instrument['scale']).max(), :]
                 code = p_instrument.loc[np.abs(p_instrument['signal']).idxmax(), 'code']
-                df.loc[df['code'] == code, 'profit_position'] = df.loc[df['code'] == code, 'profit_position'] + df.loc[df['code'] == code, 'scale'] * min(trade_volume, df.loc[df['code'] == code, 'volume'].values * quota)
+                df.loc[df['code'] == code, 'profit_position'] = df.loc[df['code'] == code, 'profit_position'] + np.sign(df.loc[df['code'] == code, 'scale']) * min(np.abs(df.loc[df['code'] == code, 'scale'].values) * trade_volume, df.loc[df['code'] == code, 'volume'].values * quota)
                 df.loc[df['code'] == code, 'rolled'] = 1
             else:
                 break
@@ -440,7 +440,7 @@ def Hedge_Open_Slow(df, vega_tolerance, trade_volume, quota):
     if delta < 0:
         df.loc[df['type'] == 'S', 'hedge_position'] = df.loc[df['type'] == 'S', 'hedge_position']-round(delta)
     else:
-        h_instrument = df.loc[(df['scale'] == 0)&(df['profit_position']), :]
+        h_instrument = df.loc[(df['scale'] == 0)&(df['profit_position'] == 0), :]
         if len(h_instrument) > 0:
             code = h_instrument.loc[np.abs(h_instrument['delta']).idxmax(), 'code']
             hp = -round(delta/df.loc[df['code'] == code, 'delta'])
