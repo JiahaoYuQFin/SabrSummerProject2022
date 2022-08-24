@@ -31,7 +31,25 @@ class OptionStra:
         df_pos = df_greeks.reset_index().groupby('time', as_index=False).apply(lambda x: window_of_straddle(x))
         df_pos['position'] = df_pos.groupby('code')['position'].shift(1).fillna(0)
         df_pos = df_pos.set_index(['time', 'code'])
-        return df_pos[['open', 'high', 'low', 'close', 'volume', 'position']]
+        return df_pos[['open', 'close', 'volume', 'delta', 'gamma', 'theta', 'vega', 'volga', 'position']]
+
+    def volga_stra(self, df_greeks: pd.DataFrame, direction='long') -> pd.DataFrame:
+        if direction == 'long':
+            df_pos = df_greeks.reset_index().groupby('time', as_index=False).apply(lambda x: window_of_volga(x, 1))
+        else:
+            df_pos = df_greeks.reset_index().groupby('time', as_index=False).apply(lambda x: window_of_volga(x, -1))
+        df_pos['position'] = df_pos.groupby('code')['position'].shift(1).fillna(0)
+        df_pos = df_pos.set_index(['time', 'code'])
+        return df_pos[['open', 'close', 'volume', 'delta', 'gamma', 'theta', 'vega', 'volga', 'position']]
+
+    def theta_stra(self, df_greeks: pd.DataFrame, direction='long') -> pd.DataFrame:
+        if direction == 'long':
+            df_pos = df_greeks.reset_index().groupby('time', as_index=False).apply(lambda x: window_of_theta(x, 1))
+        else:
+            df_pos = df_greeks.reset_index().groupby('time', as_index=False).apply(lambda x: window_of_theta(x, -1))
+        df_pos['position'] = df_pos.groupby('code')['position'].shift(1).fillna(0)
+        df_pos = df_pos.set_index(['time', 'code'])
+        return df_pos[['open', 'close', 'volume', 'delta', 'gamma', 'theta', 'vega', 'volga', 'position']]
 
 
 def window_of_straddle(df: pd.DataFrame, num: int = 1):
@@ -50,6 +68,37 @@ def window_of_straddle(df: pd.DataFrame, num: int = 1):
         b = np.array([0, 1])
         x = np.linalg.solve(a, b)
         df.loc[idx_strike, 'position'] = x
+    return df
+
+
+def window_of_volga(df: pd.DataFrame, direction=1):
+    df_pool = df.query("((type==1)&(0.1<delta<0.9))|((type==-1)&(-0.9<delta<-0.1))").copy(deep=True)
+    greeks_arr = df_pool[['delta', 'gamma', 'vega', 'volga']].values
+    cons = (
+        {'type': 'eq', 'fun': lambda x: x.sum()-1},
+        {'type': 'ineq', 'fun': lambda x: x + 1},
+        {'type': 'ineq', 'fun': lambda x: 1 - x}
+    )
+    sol = sopt.minimize(fun=lambda x: -direction*x@greeks_arr[:, -1] + 0.15 * abs(x@greeks_arr[:, 0]) +
+                                      0.15 * abs(x@greeks_arr[:, 2]) + 0.1 * abs(x@greeks_arr[:, 1]),
+                        x0=np.zeros(greeks_arr.shape[0]), method='SLSQP', constraints=cons)
+    df.loc[df_pool.index, 'position'] = sol.x
+    return df
+
+
+def window_of_theta(df: pd.DataFrame, direction=1):
+    df_pool = df.query("((type==1)&(0.1<delta<0.9))|((type==-1)&(-0.9<delta<-0.1))").copy(deep=True)
+    greeks_arr = df_pool[['delta', 'gamma', 'vega', 'theta']].values
+    cons = (
+        {'type': 'eq', 'fun': lambda x: x.sum()-1},
+        {'type': 'ineq', 'fun': lambda x: x + 1},
+        {'type': 'ineq', 'fun': lambda x: 1 - x}
+    )
+    sol = sopt.minimize(
+        fun=lambda x: -direction * x @ greeks_arr[:, -1] + 0.15 * abs(x @ greeks_arr[:, 0]) + 0.06 * abs(
+            x @ greeks_arr[:, 1]) + 0.06 * abs(x @ greeks_arr[:, 2]),
+        x0=np.zeros(greeks_arr.shape[0]), method='SLSQP', constraints=cons)
+    df.loc[df_pool.index, 'position'] = sol.x
     return df
 
 
@@ -104,3 +153,24 @@ def window_of_greek(df: pd.DataFrame, nearest_num=3):
     df_new.loc[idx_put, 'volga'] = model.volga_numeric(strike=pstrike, spot=spot, texp=texp, cp=-1)
 
     return df_new
+
+
+def execute():
+    etf_path = r'../03_data/300etf.pkl'
+    option_path = r'../03_data/300etf_option2207.pkl'
+    df_etf = pd.read_pickle(etf_path)
+    df_opt = pd.read_pickle(option_path)
+    df_greeks = pd.read_pickle(r'../03_data/greeks_22060708.pkl')
+    # e
+    model = OptionStra(df_opt=df_opt.query("time>='2022-06-16 09:45:00'"), df_stock=df_etf)
+    # df_theta_pos = model.theta_stra(df_greeks=df_greeks, direction='long')
+    # df_theta_pos.to_pickle(r'../backtest/strategy_file/strategy_theta.pkl')
+    df_volga_l_pos = model.volga_stra(df_greeks=df_greeks, direction='long')
+    df_volga_l_pos.to_pickle(r'../backtest/strategy_file/strategy_long_volga.pkl')
+    # df_volga_s_pos = model.volga_stra(df_greeks=df_greeks, direction='short')
+    # df_volga_s_pos.to_pickle(r'../backtest/strategy_file/strategy_short_volga.pkl')
+    # df_straddle_pos.to_pickle(r'../backtest/strategy_file/strategy_straddle.pkl')
+
+
+if __name__ == '__main__':
+    execute()
