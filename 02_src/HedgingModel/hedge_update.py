@@ -431,7 +431,7 @@ def Hedge_Open_Slow(df, vega_tolerance, trade_volume, quota):
                 df.loc[df['code'] == code, 'rolled'] = 1
             else:
                 break
-        df['profit_position'] = round(df['profit_position'])
+        df['profit_position'] = df['profit_position'].apply(lambda x:round(x))
         vega = np.sum(df['profit_position'] * df['vega']) + np.sum(df['hedge_position'] * df['vega'])
         instruments = df.loc[(df['scale'] != 0)&(df['rolled'] == 0), :]
     
